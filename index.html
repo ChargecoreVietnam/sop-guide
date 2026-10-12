@@ -47,6 +47,19 @@ nav a.it.on{background:var(--accent-bg);color:var(--accent);border-left-color:va
 nav a.it code{font-weight:600;background:none;padding:0}
 nav a.it span{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 nav a.it.on span{color:inherit}
+nav details details{margin-left:12px}
+nav summary{cursor:pointer;padding:5px 8px;border-radius:8px;font-size:14px;font-weight:600}
+nav summary:hover{background:var(--soft)}
+nav summary{list-style:none}
+nav summary::-webkit-details-marker{display:none}
+nav summary::before{content:"›";flex:none;display:inline-block;width:12px;margin-right:4px;color:var(--accent);font-weight:700;transition:transform .15s}
+nav details[open]>summary::before{transform:rotate(90deg)}
+nav details[open]>summary{color:var(--accent)}
+nav details details summary:hover code{text-decoration:underline dotted}
+nav summary small{color:var(--muted);font-weight:500}
+nav details details summary{font-weight:400;display:flex;gap:8px;align-items:baseline;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+nav details details summary span{color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+nav details details a.it{margin-left:22px}
 
 /* ---- nội dung ---- */
 main{padding:32px 40px 80px;max-width:1080px;width:100%;margin:0 auto}
@@ -250,6 +263,7 @@ const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">"
 const render = (md) => (window.marked ? marked.parse(md) : "<pre>" + esc(md) + "</pre>");
 const families = [...new Set(DATA.sops.map((s) => s.family))];
 const id = (s) => "sop/" + s.family.replace(/ /g, "") + "/" + s.code;
+const exits = (s) => s.md.split("\n")[0].match(/E\d/g) || [];
 const badge = (s) => s.onsite ? '<span class="tag t-warn">Đến trạm</span>' : '<span class="tag t-ok">Từ xa</span>';
 
 function buildNav(filter = "") {
@@ -257,14 +271,20 @@ function buildNav(filter = "") {
   $("#navlib").innerHTML = families.map((fam) => {
     const items = DATA.sops.filter((s) => s.family === fam && (!f || (s.code + " " + s.name + " " + fam).toLowerCase().includes(f)));
     if (!items.length) return "";
-    return `<div class="grp"><b>${fam} (${items.length})</b>` +
-      items.map((s) => `<a class="it" href="#${id(s)}" title="${esc(s.name)}"><code>${s.code}</code><span>${esc(s.name)}</span></a>`).join("") + "</div>";
+    return `<details${f ? " open" : ""}><summary>${fam} <small>(${items.length})</small></summary>` +
+      items.map((s) => `<details><summary title="${esc(s.name)}"><code>${s.code}</code><span>${esc(s.name)}</span></summary>` +
+        `<a class="it" href="#${id(s)}">Toàn bộ SOP</a>` +
+        exits(s).map((e) => `<a class="it" href="#${id(s)}/${e}"><code>${e}</code></a>`).join("") + "</details>").join("") + "</details>";
   }).join("") || '<p class="sub" style="margin:12px 8px">Không tìm thấy mã nào.</p>';
   markActive();
 }
 function markActive() {
   const h = location.hash.slice(1);
-  document.querySelectorAll("nav a.it").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === "#" + h));
+  document.querySelectorAll("nav a.it").forEach((a) => {
+    const on = a.getAttribute("href") === "#" + h;
+    a.classList.toggle("on", on);
+    for (let d = a.parentElement; on && d.tagName === "DETAILS"; d = d.parentElement) d.open = true;
+  });
 }
 function home(anchor) {
   $("#main").innerHTML = $("#tpl-flow").innerHTML;
@@ -284,8 +304,12 @@ function page(crumb, title, sub, body) {
 }
 function route() {
   const h = decodeURIComponent(location.hash.slice(1));
-  const s = DATA.sops.find((x) => id(x) === h);
-  if (s) page(s.family, `${s.code} — ${esc(s.name)}`, `<p class="sub" style="margin:0">Dòng máy <b>${s.family}</b> · ${badge(s)}</p>`, render(s.md));
+  const s = DATA.sops.find((x) => h === id(x) || h.startsWith(id(x) + "/"));
+  if (s) {
+    page(s.family, `${s.code} — ${esc(s.name)}`, `<p class="sub" style="margin:0">Dòng máy <b>${s.family}</b> · ${badge(s)}</p>`, render(s.md));
+    const e = h.slice(id(s).length + 1);
+    if (e) [...document.querySelectorAll(".sop h3")].find((x) => new RegExp("\\b" + e + "\\b").test(x.textContent))?.scrollIntoView();
+  }
   else if (h === "general") page("Vật tư", "Luật vật tư AI chấm", "", render(DATA.general));
   else if (h === "vattu") page("Vật tư", "SOP ảnh và Solution khi thay vật tư", "", render(DATA.vattu));
   else home(h);
